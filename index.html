@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+  <title>My Original AI</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+</head>
+<body>
+  <h1>My Original AI</h1>
+  <p id="status">AIの準備中...</p>
+  <script>
+    document.getElementById("status").textContent =
+      "TensorFlow.js: " +
+      (typeof tf !== "undefined" ? "読み込み成功" : "読み込み失敗");
+  </script>
+</body>
+</html>
