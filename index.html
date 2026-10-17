@@ -53,6 +53,10 @@
 
     let model = null;
     let ready = false;
+    let xMin = null;
+    let xScale = null;
+    let yMin = null;
+    let yScale = null;
 
     async function init() {
       if (typeof tf === "undefined") {
@@ -82,29 +86,27 @@
       predictButton.disabled = true;
       ready = false;
 
-      if (model) {
-        model.dispose();
-        model = null;
-      }
+   
 
       try {
         const xs = numbers.slice(0, -1);
         const ys = numbers.slice(1);
 
-        const xMin = Math.min(...xs);
-        const xMax = Math.max(...xs);
-        const yMin = Math.min(...ys);
-        const yMax = Math.max(...ys);
+        if (xMin === null) {
+        xMin = Math.min(...xs);
+        xScale = Math.max(Math.max(...xs) - xMin, 1);
 
-        const xScale = Math.max(xMax - xMin, 1);
-        const yScale = Math.max(yMax - yMin, 1);
+        yMin = Math.min(...ys);
+        yScale = Math.max(Math.max(...ys) - yMin, 1);
+      }
 
         const xData = xs.map(n => [(n - xMin) / xScale]);
         const yData = ys.map(n => [(n - yMin) / yScale]);
 
         const xTensor = tf.tensor2d(xData);
         const yTensor = tf.tensor2d(yData);
-
+        
+        if (!model) {
         model = tf.sequential();
         model.add(tf.layers.dense({
           units: 16,
@@ -122,7 +124,7 @@
         model.compile({
           optimizer: tf.train.adam(0.03),
           loss: "meanSquaredError"
-        });
+        });}
 
         await model.fit(xTensor, yTensor, {
           epochs: 150,
