@@ -1,19 +1,184 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>My Original AI</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 700px;
+      margin: 30px auto;
+      padding: 16px;
+      line-height: 1.6;
+    }
+    button, input {
+      font-size: 16px;
+      padding: 10px;
+      margin: 4px 0;
+    }
+    input { width: 90%; }
+    button { cursor: pointer; }
+    #output {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f2f2f2;
+      padding: 12px;
+      border-radius: 8px;
+    }
+  </style>
 </head>
 <body>
   <h1>My Original AI</h1>
-  <p id="status">AIの準備中...</p>
+  <p>自分で学習する小さなニューラルネットワーク</p>
+  <p id="status">TensorFlow.jsを確認中...</p>
+
+  <label for="training">学習データ（数字の規則を学習）</label><br>
+  <input id="training" value="1,2,3,4,5,6,7,8,9,10">
+  <br>
+  <button id="train">学習する</button>
+  <button id="predict" disabled>次の数字を予測</button>
+
+  <p id="progress">まだ学習していません。</p>
+  <div id="output">ここに結果が表示されます。</div>
+
   <script>
-    document.getElementById("status").textContent =
-      "TensorFlow.js: " +
-      (typeof tf !== "undefined" ? "読み込み成功" : "読み込み失敗");
+    const statusEl = document.getElementById("status");
+    const progressEl = document.getElementById("progress");
+    const outputEl = document.getElementById("output");
+    const trainButton = document.getElementById("train");
+    const predictButton = document.getElementById("predict");
+
+    let model = null;
+    let ready = false;
+
+    async function init() {
+      if (typeof tf === "undefined") {
+        statusEl.textContent =
+          "TensorFlow.jsの読み込みに失敗しました。通信を確認してください。";
+        return;
+      }
+
+      await tf.ready();
+      statusEl.textContent =
+        "読み込み成功！ 実行環境: " + tf.getBackend();
+    }
+
+    trainButton.addEventListener("click", async () => {
+      const numbers = document.getElementById("training").value
+        .split(",")
+        .map(s => Number(s.trim()));
+
+      if (numbers.length < 4 ||
+          numbers.some(n => !Number.isFinite(n))) {
+        outputEl.textContent =
+          "数字を4個以上、カンマ区切りで入力してください。";
+        return;
+      }
+
+      trainButton.disabled = true;
+      predictButton.disabled = true;
+      ready = false;
+
+      if (model) {
+        model.dispose();
+        model = null;
+      }
+
+      try {
+        const xs = numbers.slice(0, -1);
+        const ys = numbers.slice(1);
+
+        const xMin = Math.min(...xs);
+        const xMax = Math.max(...xs);
+        const yMin = Math.min(...ys);
+        const yMax = Math.max(...ys);
+
+        const xScale = Math.max(xMax - xMin, 1);
+        const yScale = Math.max(yMax - yMin, 1);
+
+        const xData = xs.map(n => [(n - xMin) / xScale]);
+        const yData = ys.map(n => [(n - yMin) / yScale]);
+
+        const xTensor = tf.tensor2d(xData);
+        const yTensor = tf.tensor2d(yData);
+
+        model = tf.sequential();
+        model.add(tf.layers.dense({
+          units: 16,
+          activation: "relu",
+          inputShape: [1]
+        }));
+        model.add(tf.layers.dense({
+          units: 16,
+          activation: "relu"
+        }));
+        model.add(tf.layers.dense({
+          units: 1
+        }));
+
+        model.compile({
+          optimizer: tf.train.adam(0.03),
+          loss: "meanSquaredError"
+        });
+
+        await model.fit(xTensor, yTensor, {
+          epochs: 150,
+          shuffle: true,
+          callbacks: {
+            onEpochEnd: async (epoch, logs) => {
+              if (epoch % 10 === 0 || epoch === 149) {
+                progressEl.textContent =
+                  `学習中: ${epoch + 1}/150  損失: ${logs.loss.toFixed(5)}`;
+                await new Promise(resolve => setTimeout(resolve, 0));
+              }
+            }
+          }
+        });
+
+        window.xMin = xMin;
+        window.xScale = xScale;
+        window.yMin = yMin;
+        window.yScale = yScale;
+        window.lastNumber = numbers[numbers.length - 1];
+
+        ready = true;
+        predictButton.disabled = false;
+        progressEl.textContent = "学習完了！";
+        outputEl.textContent =
+          "モデルが学習データの数値パターンを学びました。予測ボタンを押してみよう。";
+
+        xTensor.dispose();
+        yTensor.dispose();
+      } catch (error) {
+        outputEl.textContent = "エラー: " + error.message;
+      } finally {
+        trainButton.disabled = false;
+      }
+    });
+
+    predictButton.addEventListener("click", () => {
+      if (!ready || !model) return;
+
+      const inputValue =
+        (window.lastNumber - window.xMin) / window.xScale;
+
+      const result = tf.tidy(() => {
+        const input = tf.tensor2d([[inputValue]]);
+        return model.predict(input).dataSync()[0];
+      });
+
+      const prediction = window.yMin + result * window.yScale;
+
+      outputEl.textContent =
+        `最後の学習データ: ${window.lastNumber}\n` +
+        `モデルの予測: ${prediction.toFixed(3)}\n\n` +
+        "これは小さな数値予測モデルです。まだ言語モデルではありません。";
+    });
+
+    init();
   </script>
 </body>
 </html>
